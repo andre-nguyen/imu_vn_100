@@ -214,8 +214,8 @@ void ImuVn100::Stream(bool async) {
     if (binary_output_) {
       // Set the binary output data type and data rate
       VnEnsure(vn100_setBinaryOutput1Configuration(
-          &imu_, BINARY_ASYNC_MODE_SERIAL_2, kBaseImuRate / imu_rate_,
-          BG1_QTN | BG1_IMU | BG1_MAG_PRES | BG1_SYNC_IN_CNT,
+          &imu_, BINARY_ASYNC_MODE_SERIAL_1, kBaseImuRate / imu_rate_,
+          BG1_YPR | BG1_ANGULAR_RATE | BG1_ACCEL,
           // BG1_IMU,
           BG3_NONE, BG5_NONE, true));
     } else {
@@ -325,6 +325,13 @@ void RosVector3FromVnVector3(geometry_msgs::Vector3& ros_vec3,
   ros_vec3.z = vn_vec3.c2;
 }
 
+void RosVector3FromVnYpr(geometry_msgs::Vector3& ros_vec3,
+                             const VnYpr& vn_ypr) {
+  ros_vec3.x = vn_ypr.yaw;
+  ros_vec3.y = vn_ypr.pitch;
+  ros_vec3.z = vn_ypr.roll;
+}
+
 void RosQuaternionFromVnQuaternion(geometry_msgs::Quaternion& ros_quat,
                                    const VnQuaternion& vn_quat) {
   ros_quat.x = vn_quat.x;
@@ -333,18 +340,28 @@ void RosQuaternionFromVnQuaternion(geometry_msgs::Quaternion& ros_quat,
   ros_quat.w = vn_quat.w;
 }
 
+void RosQuaternionFromVnYpr(geometry_msgs::Quaternion& ros_quat,
+                                   const VnYpr& vn_ypr) {
+  ros_quat.x = vn_ypr.roll;
+  ros_quat.y = vn_ypr.pitch;
+  ros_quat.z = vn_ypr.yaw;
+}
+
+
 void FillImuMessage(sensor_msgs::Imu& imu_msg,
                     const VnDeviceCompositeData& data, bool binary_output) {
   if (binary_output) {
-    RosQuaternionFromVnQuaternion(imu_msg.orientation, data.quaternion);
+    RosQuaternionFromVnYpr(imu_msg.orientation, data.ypr);
     // NOTE: The IMU angular velocity and linear acceleration outputs are
     // swapped. And also why are they different?
     RosVector3FromVnVector3(imu_msg.angular_velocity,
-                            data.accelerationUncompensated);
+                            data.acceleration);
     RosVector3FromVnVector3(imu_msg.linear_acceleration,
-                            data.angularRateUncompensated);
+                            data.angularRate);
   } else {
-    RosVector3FromVnVector3(imu_msg.linear_acceleration, data.acceleration);
+    RosQuaternionFromVnQuaternion(imu_msg.orientation, data.quaternion);
+
+    RosVector3FromVnYpr(imu_msg.linear_acceleration, data.ypr);
     RosVector3FromVnVector3(imu_msg.angular_velocity, data.angularRate);
   }
 }
