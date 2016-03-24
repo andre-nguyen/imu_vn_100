@@ -66,6 +66,7 @@ constexpr int ImuVn100::kDefaultSyncOutRate;
 void ImuVn100::SyncInfo::Update(const unsigned sync_count,
                                 const ros::Time& sync_time) {
   if (rate <= 0) return;
+  std::lock_guard<std::mutex> lock(this->info_mutex);
 
   if (count != sync_count) {
     count = sync_count;
@@ -131,8 +132,8 @@ void ImuVn100::LoadParameters() {
   pnh_.param("enable_pres", enable_pres_, true);
   pnh_.param("enable_temp", enable_temp_, true);
 
-  pnh_.param("sync_rate", sync_info_.rate, kDefaultSyncOutRate);
-  pnh_.param("sync_pulse_width_us", sync_info_.pulse_width_us, 1000);
+  pnh_.param("sync_rate", sync_info_->rate, kDefaultSyncOutRate);
+  pnh_.param("sync_pulse_width_us", sync_info_->pulse_width_us, 1000);
 
   pnh_.param("binary_output", binary_output_, true);
 
@@ -162,7 +163,7 @@ void ImuVn100::LoadParameters() {
   }
 
   FixImuRate();
-  sync_info_.FixSyncRate();
+  sync_info_->FixSyncRate();
 }
 
 void ImuVn100::CreateDiagnosedPublishers() {
@@ -225,14 +226,14 @@ void ImuVn100::Initialize() {
   std::string firmw_rev = imu_.readFirmwareVersion();
   ROS_INFO("Firmware version: %s", firmw_rev.c_str());
 
-  if (sync_info_.SyncEnabled()) {
+  if (sync_info_->SyncEnabled()) {
     ROS_INFO("Set Synchronization Control Register.");
     imu_.writeSynchronizationControl(
         vn::protocol::uart::SYNCINMODE_COUNT,
         vn::protocol::uart::SYNCINEDGE_RISING, 0,
         vn::protocol::uart::SYNCOUTMODE_ITEMSTART,
-        vn::protocol::uart::SYNCOUTPOLARITY_POSITIVE, sync_info_.skip_count,
-        sync_info_.pulse_width_us * 1000, true);
+        vn::protocol::uart::SYNCOUTPOLARITY_POSITIVE, sync_info_->skip_count,
+        sync_info_->pulse_width_us * 1000, true);
 
     if (!binary_output_) {
       ROS_INFO("Set Communication Protocol Control Register (id:30).");
@@ -362,7 +363,7 @@ void ImuVn100::PublishData(vn::protocol::uart::Packet& p) {
   }
 
   unsigned int syncInCnt = p.extractUint32();
-  sync_info_.Update(syncInCnt, imu_msg.header.stamp);
+  sync_info_->Update(syncInCnt, imu_msg.header.stamp);
 
   updater_.update();
 }

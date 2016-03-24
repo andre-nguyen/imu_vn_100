@@ -19,6 +19,8 @@
 #ifndef IMU_VN_100_ROS_H_
 #define IMU_VN_100_ROS_H_
 
+#include <mutex>
+
 #include <ros/ros.h>
 #include <diagnostic_updater/diagnostic_updater.h>
 #include <diagnostic_updater/publisher.h>
@@ -91,6 +93,7 @@ class ImuVn100 {
   void Configure();
 
   struct SyncInfo {
+    std::mutex info_mutex;
     unsigned count = 0;
     ros::Time time;
 
@@ -104,7 +107,9 @@ class ImuVn100 {
     bool SyncEnabled() const;
   };
 
-  const SyncInfo sync_info() const { return sync_info_; }
+  const SyncInfo* sync_info() const { return sync_info_; }
+  void lock_sync_info() { sync_info_->info_mutex.lock(); }
+  void unlock_sync_info() { sync_info_->info_mutex.unlock(); }
 
   bool IsBinaryOutput() { return binary_output_; }
  private:
@@ -124,7 +129,7 @@ class ImuVn100 {
   bool enable_temp_ = true;
   bool binary_output_ = true;
 
-  SyncInfo sync_info_;
+  SyncInfo* sync_info_;
 
   du::Updater updater_;
   DiagnosedPublisher pd_imu_, pd_mag_, pd_pres_, pd_temp_;
