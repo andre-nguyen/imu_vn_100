@@ -266,10 +266,10 @@ void ImuVn100::Stream(bool async) {
       // Set the binary output data type and data rate
       vn::sensors::BinaryOutputRegister bor(
           vn_serial_output_, kBaseImuRate / imu_rate_,
-          (COMMONGROUP_TIMESTARTUP | COMMONGROUP_QUATERNION | COMMONGROUP_IMU |
+          (COMMONGROUP_TIMESTARTUP | COMMONGROUP_QUATERNION |
            COMMONGROUP_MAGPRES | COMMONGROUP_SYNCINCNT),
-          TIMEGROUP_NONE, IMUGROUP_NONE, GPSGROUP_NONE, ATTITUDEGROUP_NONE,
-          INSGROUP_NONE);
+          TIMEGROUP_NONE, (IMUGROUP_ACCEL | IMUGROUP_ANGULARRATE),
+          GPSGROUP_NONE, ATTITUDEGROUP_NONE, INSGROUP_NONE);
 
       imu_.writeBinaryOutput1(bor, true);
     } else {
@@ -335,22 +335,12 @@ void ImuVn100::PublishData(vn::protocol::uart::Packet& p) {
     }
     ros_prev_timestamp_ = imu_msg.header.stamp;
     vn100_prev_timestamp_ = time_since_startup;  // COMMONGROUP_TIMESTARTUP
-    quaternion = p.extractVec4f();  // COMMONGROUP_QUATERNION
-    // NOTE: The IMU angular velocity and linear acceleration outputs are
-    // swapped. And also why are they different?
-    linear_accel = p.extractVec3f();  // COMMONGROUP_IMU
-    angular_rate = p.extractVec3f();  // COMMONGROUP_IMU
+    quaternion = p.extractVec4f();    // COMMONGROUP_QUATERNION
     magnetometer = p.extractVec3f();  // COMMONGROUP_MAGPRES
   } else {
     // In ascii mode, linear acceleration and angular velocity are NOT swapped
     p.parseVNQMR(&quaternion, &magnetometer, &linear_accel, &angular_rate);
   }
-
-  RosQuaternionFromVnVector4(imu_msg.orientation, quaternion);
-  RosVector3FromVnVector3(imu_msg.angular_velocity, angular_rate);
-  RosVector3FromVnVector3(imu_msg.linear_acceleration, linear_accel);
-
-  pd_imu_.Publish(imu_msg);
 
   if (enable_mag_) {
     sensor_msgs::MagneticField mag_msg;
@@ -359,24 +349,32 @@ void ImuVn100::PublishData(vn::protocol::uart::Packet& p) {
     pd_mag_.Publish(mag_msg);
   }
 
+  float temperature = p.extractFloat();  // COMMONGROUP_MAGPRES
   if (enable_temp_) {
     sensor_msgs::Temperature temp_msg;
     temp_msg.header = imu_msg.header;
-    float temperature = p.extractFloat();  // COMMONGROUP_MAGPRES
     temp_msg.temperature = temperature;
     pd_temp_.Publish(temp_msg);
   }
 
+  float pressure = p.extractFloat();  // COMMONGROUP_MAGPRES
   if (enable_pres_) {
     sensor_msgs::FluidPressure pres_msg;
     pres_msg.header = imu_msg.header;
-    float pressure = p.extractFloat();  // COMMONGROUP_MAGPRES
     pres_msg.fluid_pressure = pressure;
     pd_pres_.Publish(pres_msg);
   }
 
-  unsigned int syncInCnt = p.extractUint32();
+  unsigned int syncInCnt = p.extractUint32();  // COMMONGROUP_SYNCINCNT
+  linear_accel = p.extractVec3f();  // IMUGROUP_ACCEL
+  angular_rate = p.extractVec3f();  // IMUGROUP_ANGULARRATE
+
+  RosQuaternionFromVnVector4(imu_msg.orientation, quaternion);
+  RosVector3FromVnVector3(imu_msg.angular_velocity, angular_rate);
+  RosVector3FromVnVector3(imu_msg.linear_acceleration, linear_accel);
+
   sync_info_->Update(syncInCnt, imu_msg.header.stamp);
+  pd_imu_.Publish(imu_msg);
 
   updater_.update();
 }
@@ -404,8 +402,8 @@ void asciiOrBinaryAsyncMessageReceived(void* userData,
 
   if (imu->IsBinaryOutput()) {
     if (!p.isCompatible((COMMONGROUP_TIMESTARTUP | COMMONGROUP_QUATERNION |
-                         COMMONGROUP_IMU | COMMONGROUP_MAGPRES |
-                         COMMONGROUP_SYNCINCNT), TIMEGROUP_NONE, IMUGROUP_NONE,
+                         COMMONGROUP_MAGPRES | COMMONGROUP_SYNCINCNT),
+                        TIMEGROUP_NONE, (IMUGROUP_ACCEL | IMUGROUP_ANGULARRATE),
                         GPSGROUP_NONE, ATTITUDEGROUP_NONE, INSGROUP_NONE)) {
       // Not the type of binary packet we are expecting.
       ROS_WARN("VN: Received malformatted binary packet.");
