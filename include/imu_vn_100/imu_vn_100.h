@@ -134,6 +134,11 @@ class ImuVn100 {
   du::Updater updater_;
   DiagnosedPublisher pd_imu_, pd_mag_, pd_pres_, pd_temp_;
 
+  // State variables
+  uint64_t vn100_prev_timestamp_ = 0;   // Time since startup in nanoseconds
+  ros::Time ros_prev_timestamp_;    // Timestamp of last published message
+  bool first_publish_ = false;
+
   void FixImuRate();
   void LoadParameters();
   void CreateDiagnosedPublishers();

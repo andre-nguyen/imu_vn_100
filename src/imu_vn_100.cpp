@@ -266,8 +266,8 @@ void ImuVn100::Stream(bool async) {
       // Set the binary output data type and data rate
       vn::sensors::BinaryOutputRegister bor(
           vn_serial_output_, kBaseImuRate / imu_rate_,
-          (COMMONGROUP_QUATERNION | COMMONGROUP_IMU | COMMONGROUP_MAGPRES |
-           COMMONGROUP_SYNCINCNT),
+          (COMMONGROUP_TIMESTARTUP | COMMONGROUP_QUATERNION | COMMONGROUP_IMU |
+           COMMONGROUP_MAGPRES | COMMONGROUP_SYNCINCNT),
           TIMEGROUP_NONE, IMUGROUP_NONE, GPSGROUP_NONE, ATTITUDEGROUP_NONE,
           INSGROUP_NONE);
 
@@ -311,17 +311,30 @@ void ImuVn100::Disconnect() { imu_.disconnect(); }
 
 void ImuVn100::PublishData(vn::protocol::uart::Packet& p) {
   sensor_msgs::Imu imu_msg;
-  imu_msg.header.stamp = ros::Time::now();
   imu_msg.header.frame_id = frame_id_;
 
   vn::math::vec4f quaternion;
   vn::math::vec3f linear_accel;
   vn::math::vec3f angular_rate;
   vn::math::vec3f magnetometer;
+  uint64_t time_since_startup;
   if (binary_output_) {
     // Note: With this library, we are responsible for extracting the data
     // in the appropriate order! Need to refer to manual and to how we
     // configured the common output group
+    time_since_startup = p.extractUint64();
+    if (first_publish_) {
+      imu_msg.header.stamp = ros::Time::now();
+      first_publish_ = false;
+    } else {
+      // basically offset the time using the vn100 clock instead of the ros
+      // clock. Should get better timings this way
+      ros::Duration vn100_integration_duration;
+      vn100_integration_duration.fromNSec(time_since_startup - vn100_prev_timestamp_);
+      imu_msg.header.stamp = ros_prev_timestamp_ + vn100_integration_duration;
+    }
+    ros_prev_timestamp_ = imu_msg.header.stamp;
+    vn100_prev_timestamp_ = time_since_startup;  // COMMONGROUP_TIMESTARTUP
     quaternion = p.extractVec4f();  // COMMONGROUP_QUATERNION
     // NOTE: The IMU angular velocity and linear acceleration outputs are
     // swapped. And also why are they different?
@@ -390,10 +403,10 @@ void asciiOrBinaryAsyncMessageReceived(void* userData,
   ImuVn100* imu = (ImuVn100*)userData;
 
   if (imu->IsBinaryOutput()) {
-    if (!p.isCompatible((COMMONGROUP_QUATERNION | COMMONGROUP_IMU |
-                         COMMONGROUP_MAGPRES | COMMONGROUP_SYNCINCNT),
-                        TIMEGROUP_NONE, IMUGROUP_NONE, GPSGROUP_NONE,
-                        ATTITUDEGROUP_NONE, INSGROUP_NONE)) {
+    if (!p.isCompatible((COMMONGROUP_TIMESTARTUP | COMMONGROUP_QUATERNION |
+                         COMMONGROUP_IMU | COMMONGROUP_MAGPRES |
+                         COMMONGROUP_SYNCINCNT), TIMEGROUP_NONE, IMUGROUP_NONE,
+                        GPSGROUP_NONE, ATTITUDEGROUP_NONE, INSGROUP_NONE)) {
       // Not the type of binary packet we are expecting.
       ROS_WARN("VN: Received malformatted binary packet.");
       return;
