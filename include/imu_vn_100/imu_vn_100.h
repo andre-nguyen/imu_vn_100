@@ -24,6 +24,7 @@
 #include <sensor_msgs/MagneticField.h>
 #include <sensor_msgs/FluidPressure.h>
 #include <sensor_msgs/Temperature.h>
+#include <trigger_sync/trigger_sync.h>
 
 #include <vn100.h>
 
@@ -120,6 +121,7 @@ class ImuVn100 {
   bool binary_output_ = true;
 
   SyncInfo sync_info_;
+  TriggerSync* ts_;
 
   du::Updater updater_;
   DiagnosedPublisher pd_imu_, pd_mag_, pd_pres_, pd_temp_;

@@ -82,6 +82,7 @@ ImuVn100::ImuVn100(const ros::NodeHandle& pnh)
       frame_id_(std::string("imu")) {
   Initialize();
   imu_vn_100_ptr = this;
+  ts_ = new TriggerSync("vn100", "local");
 }
 
 ImuVn100::~ImuVn100() { Disconnect(); }
@@ -257,7 +258,14 @@ void ImuVn100::Disconnect() {
 
 void ImuVn100::PublishData(const VnDeviceCompositeData& data) {
   sensor_msgs::Imu imu_msg;
-  imu_msg.header.stamp = ros::Time::now();
+  ros::Time corrected_stamp;
+  ros::Time vnTime = ros::Time().fromNSec(data.timeStartup);
+  if (data.syncInCnt != sync_info_.count) {
+    corrected_stamp = ts_->update(vnTime, ros::Time::now());
+  } else {
+    corrected_stamp = ts_->deviceTimeToClientTime(vnTime);
+  }
+  imu_msg.header.stamp = corrected_stamp;
   imu_msg.header.frame_id = frame_id_;
 
   FillImuMessage(imu_msg, data, binary_output_);
