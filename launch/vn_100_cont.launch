@@ -9,7 +9,7 @@
 
     <!-- Sync out settings -->
     <!-- to disable this just set it to < 0 -->
-    <arg name="sync_rate" default="20"/>
+    <arg name="sync_rate" default="30"/>
     <arg name="sync_pulse_width_us" default="1000"/>
 
     <arg name="binary_output" default="true"/>
