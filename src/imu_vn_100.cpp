@@ -355,16 +355,14 @@ void FillImuMessage(sensor_msgs::Imu& imu_msg,
     // NOTE: The IMU angular velocity and linear acceleration outputs are
     // swapped. And also why are they different?
     RosVector3FromVnVector3(imu_msg.angular_velocity,
-                            data.angularRate);
-    RosVector3FromVnVector3(imu_msg.linear_acceleration,
                             data.acceleration);
+    RosVector3FromVnVector3(imu_msg.linear_acceleration,
+                            data.angularRate);
   } else {
     RosQuaternionFromVnQuaternion(imu_msg.orientation, data.quaternion);
 
-
+    RosVector3FromVnYpr(imu_msg.linear_acceleration, data.ypr);
     RosVector3FromVnVector3(imu_msg.angular_velocity, data.angularRate);
-    RosVector3FromVnVector3(imu_msg.linear_acceleration, data.acceleration);
-
   }
 }
 
